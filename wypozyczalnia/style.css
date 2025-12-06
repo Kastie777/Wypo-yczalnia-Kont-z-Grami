@@ -1,0 +1,236 @@
+/* ========================================================== */
+/* 1. ZMIENNE GLOBALNE I BAZOWE STYLIZACJE */
+/* ========================================================== */
+
+:root {
+    --primary-color: #E30000; 
+    --secondary-color: #1a1a1a; 
+    --text-color: #f0f0f0; 
+    --background-light: #ffffff; 
+    --background-dark: #222222; 
+    --border-grey: #cccccc; 
+}
+
+body {
+    font-family: Arial, sans-serif;
+    background-color: var(--background-dark);
+    color: var(--text-color);
+    margin: 0;
+    padding: 0;
+}
+
+/* --- NAGŁÓWEK --- */
+header {
+    background-color: var(--secondary-color);
+    padding: 20px 50px;
+    border-bottom: 3px solid var(--primary-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+header h1 a {
+    /* Styl dla tytułu jako link do strony głównej */
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+header h1 {
+    font-size: 1.8em;
+}
+
+nav a {
+    color: var(--text-color);
+    text-decoration: none;
+    margin-left: 20px;
+    padding: 5px 10px;
+    transition: color 0.3s;
+}
+
+nav a:hover {
+    color: var(--primary-color);
+    border-bottom: 2px solid var(--primary-color);
+}
+
+/* --- SEKCJA GŁÓWNA --- */
+.container {
+    max-width: 1200px;
+    margin: 40px auto;
+    padding: 0 20px;
+}
+
+/* ========================================================== */
+/* 2. STYLIZACJA KART PRODUKTÓW (index.php) */
+/* ========================================================== */
+
+.account-list {
+    display: grid;
+    /* Układ trzech kolumn, dostosowujący się do rozmiaru ekranu */
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
+    gap: 30px;
+}
+
+.account-card {
+    background-color: var(--background-light);
+    border: 1px solid var(--border-grey);
+    color: #333; 
+    display: flex;
+    flex-direction: column;
+    padding: 0; /* Zapewnia, że padding jest tylko w card-content */
+}
+
+.image-placeholder {
+    background-color: #e0e0e0;
+    height: 200px; 
+}
+
+.card-content {
+    padding: 15px;
+    flex-grow: 1; /* Utrzymuje stopkę na dole karty */
+}
+
+.category {
+    font-size: 0.8em;
+    color: #666;
+    margin-bottom: 5px;
+}
+
+.account-card h2 {
+    color: var(--secondary-color);
+    margin: 5px 0 10px 0;
+    font-size: 1.4em;
+}
+
+.read-more {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: bold;
+    display: block; 
+    margin-top: auto;
+}
+
+/* ========================================================== */
+/* 3. STYLIZACJA TABELI KOSZYKA (koszyk.php) */
+/* ========================================================== */
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background-color: var(--background-light);
+    color: #333;
+}
+th, td {
+    border: 1px solid var(--border-grey);
+    padding: 12px;
+    text-align: left;
+}
+th {
+    background-color: #f2f2f2;
+}
+
+/* ========================================================== */
+/* 4. KLASY DYNAMICZNE I TESTOWE */
+/* ========================================================== */
+
+/* Panel do przełączania testowych ID */
+.panel-testowy {
+    background-color: #f0f0f0; 
+    padding: 15px; 
+    border: 1px dashed #E30000; 
+    margin-bottom: 20px; 
+    color: #333;
+}
+.panel-testowy a {
+    color: white; /* Nadpisanie domyślnego koloru dla testowych linków */
+    text-decoration: none;
+    border-radius: 3px;
+    padding: 5px 10px;
+    display: inline-block;
+}
+.panel-testowy .user-id {
+    font-weight: bold; 
+    color: #008000;
+}
+
+/* Komunikaty powiadomień */
+.msg-alert {
+    padding: 15px; 
+    margin-bottom: 20px; 
+    background-color: #ffdd00; 
+    color: #1a1a1a; 
+    font-weight: bold; 
+    border-radius: 5px; 
+    text-align: center;
+}
+
+/* Wiersz z ceną (przekreślony dla promocji) */
+.price-line-through {
+    text-decoration: line-through;
+}
+
+/* Status rezerwacji */
+.reservation-active {
+    background-color: var(--primary-color); 
+    color: white; 
+    padding: 10px; 
+    font-weight: bold; 
+    text-align: center; 
+    margin-bottom: 10px;
+}
+.reservation-active[style*="background-color: #333"] {
+    background-color: #333 !important; /* Wyróżnienie TWOJEJ rezerwacji */
+}
+
+/* Przyciski (standardowe style dla akcji) */
+.btn-primary {
+    /* Dodaj do Koszyka */
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    cursor: pointer;
+}
+.btn-secondary {
+    /* Zarezerwuj */
+    background-color: #333;
+    color: white;
+    border: 1px solid #E30000;
+    padding: 5px 10px;
+    cursor: pointer;
+}
+.btn-danger {
+    /* Anuluj Rezerwację / Usuń z Koszyka */
+    background-color: #E30000;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    cursor: pointer;
+}
+.btn-success {
+    /* Przejdź do Koszyka / Płatności */
+    background-color: #008000;
+    color: white;
+    padding: 5px 10px;
+    text-decoration: none;
+    border-radius: 3px;
+    display: inline-block;
+}
+.btn-disabled {
+    /* Przyciski nieaktywne */
+    background-color: #ccc;
+    color: #666;
+    padding: 5px 10px;
+    cursor: not-allowed;
+    border: none;
+}
+
+/* --- STOPKA --- */
+footer {
+    text-align: center;
+    padding: 20px;
+    background-color: var(--secondary-color);
+    border-top: 1px solid #333;
+    color: #aaa;
+    margin-top: 40px;
+}
