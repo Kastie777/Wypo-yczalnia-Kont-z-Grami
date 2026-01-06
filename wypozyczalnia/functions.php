@@ -2,13 +2,42 @@
 
 /**
  * FUNKCJA POMOCNICZA: obliczCeneKoncowa
- * Oblicza cenę po zniżce, jeśli promocja jest aktywna.
+ * Oblicza cenę po zniżce, jeśli promocja jest aktywna i czasowo poprawna.
  */
 function obliczCeneKoncowa($cena_podstawowa, $wartosc_znizki, $czy_aktywna, $data_zakonczenia) {
-    if ($wartosc_znizki && $czy_aktywna && strtotime($data_zakonczenia) > time()) {
+    if ($wartosc_znizki && $czy_aktywna == 1 && strtotime($data_zakonczenia) > time()) {
         return $cena_podstawowa * (1 - $wartosc_znizki);
     }
     return $cena_podstawowa;
+}
+
+/**
+ * FUNKCJA: weryfikujRezerwacjeKoszyka
+ * Sprawdza przed płatnością, czy rezerwacje w koszyku nie wygasły.
+ */
+function weryfikujRezerwacjeKoszyka($conn, $uzytkownik_id) {
+    $wygasle = [];
+    $sql = "
+        SELECT k.tytul_gry, ek.konto_gier_id
+        FROM elementy_koszyka ek
+        JOIN koszyki kosz ON ek.koszyk_id = kosz.id
+        JOIN konta_gier k ON ek.konto_gier_id = k.id
+        LEFT JOIN rezerwacje r ON ek.konto_gier_id = r.konto_gier_id 
+            AND r.uzytkownik_id = $uzytkownik_id 
+            AND r.status = 'aktywna' 
+            AND r.czas_wygasniecia > NOW()
+        WHERE kosz.uzytkownik_id = $uzytkownik_id
+    ";
+    
+    $result = $conn->query($sql);
+    while ($row = $result->fetch_assoc()) {
+        // Jeśli rezerwacja nie istnieje lub wygasła (r.id byłoby NULL w LEFT JOIN)
+        $check = $conn->query("SELECT id FROM rezerwacje WHERE konto_gier_id = {$row['konto_gier_id']} AND uzytkownik_id = $uzytkownik_id AND status = 'aktywna' AND czas_wygasniecia > NOW()");
+        if ($check->num_rows == 0) {
+            $wygasle[] = $row['tytul_gry'];
+        }
+    }
+    return $wygasle;
 }
 
 /**
@@ -25,105 +54,40 @@ function dodajDoKoszyka($conn, $uzytkownik_id, $konto_id) {
         $koszyk_id = $cart_query->fetch_assoc()['id'];
     }
 
-    if (!$koszyk_id) {
-        return "Błąd krytyczny: Nie udało się ustalić ID koszyka.";
-    }
+    if (!$koszyk_id) return "Błąd krytyczny: Nie udało się ustalić ID koszyka.";
 
-    $reserved_query = $conn->query("
-        SELECT uzytkownik_id FROM rezerwacje 
-        WHERE konto_gier_id = $konto_id AND status = 'aktywna' AND czas_wygasniecia > NOW()
-    ");
-    
+    $reserved_query = $conn->query("SELECT uzytkownik_id FROM rezerwacje WHERE konto_gier_id = $konto_id AND status = 'aktywna' AND czas_wygasniecia > NOW()");
     if ($reserved_query->num_rows > 0) {
-        $reservation = $reserved_query->fetch_assoc();
-        if ($reservation['uzytkownik_id'] != $uzytkownik_id) {
-            return "Błąd: To konto jest obecnie zarezerwowane przez innego użytkownika.";
+        if ($reserved_query->fetch_assoc()['uzytkownik_id'] != $uzytkownik_id) {
+            return "Błąd: Konto zarezerwowane przez kogoś innego.";
         }
     }
 
     $item_query = $conn->query("SELECT id FROM elementy_koszyka WHERE koszyk_id = $koszyk_id AND konto_gier_id = $konto_id");
-
-    if ($item_query->num_rows > 0) {
-        return "To konto jest już w koszyku."; 
-    }
+    if ($item_query->num_rows > 0) return "To konto jest już w koszyku.";
 
     $insert_item = $conn->query("INSERT INTO elementy_koszyka (koszyk_id, konto_gier_id) VALUES ($koszyk_id, $konto_id)");
-
-    if ($insert_item) {
-        return "Pomyślnie dodano konto do koszyka!";
-    } else {
-        return "Błąd podczas dodawania do koszyka.";
-    }
+    return $insert_item ? "Pomyślnie dodano do koszyka!" : "Błąd podczas dodawania.";
 }
 
 /**
  * FUNKCJA 2: zarezerwujKonto
  */
 function zarezerwujKonto($conn, $uzytkownik_id, $konto_id) {
-    $active_reservation = $conn->query("
-        SELECT id FROM rezerwacje 
-        WHERE uzytkownik_id = $uzytkownik_id AND status = 'aktywna'
-    ");
-    if ($active_reservation->num_rows > 0) {
-        return "Masz już aktywną rezerwację, dokończ transakcję.";
+    $active_res = $conn->query("SELECT id FROM rezerwacje WHERE uzytkownik_id = $uzytkownik_id AND status = 'aktywna' AND czas_wygasniecia > NOW()");
+    if ($active_res->num_rows > 0) return "Masz już aktywną rezerwację.";
+
+    $reserved = $conn->query("SELECT id FROM rezerwacje WHERE konto_gier_id = $konto_id AND status = 'aktywna' AND czas_wygasniecia > NOW()");
+    if ($reserved->num_rows > 0) return "To konto jest już niedostępne.";
+
+    $expiration = date('Y-m-d H:i:s', strtotime('+15 minutes'));
+    $insert = $conn->query("INSERT INTO rezerwacje (uzytkownik_id, konto_gier_id, czas_wygasniecia, status) VALUES ($uzytkownik_id, $konto_id, '$expiration', 'aktywna')");
+
+    if ($insert) {
+        $conn->query("DELETE ek FROM elementy_koszyka ek JOIN koszyki k ON ek.koszyk_id = k.id WHERE k.uzytkownik_id != $uzytkownik_id AND ek.konto_gier_id = $konto_id");
+        return "Zarezerwowano na 15 minut! " . dodajDoKoszyka($conn, $uzytkownik_id, $konto_id);
     }
-
-    $reserved_query = $conn->query("
-        SELECT id FROM rezerwacje 
-        WHERE konto_gier_id = $konto_id AND status = 'aktywna' AND czas_wygasniecia > NOW()
-    ");
-    if ($reserved_query->num_rows > 0) {
-        return "To konto jest już niedostępne (zarezerwowane)."; 
-    }
-    
-    $expiration_time = date('Y-m-d H:i:s', strtotime('+15 minutes'));
-
-    $insert_res = $conn->query("
-        INSERT INTO rezerwacje (uzytkownik_id, konto_gier_id, czas_wygasniecia, status) 
-        VALUES ($uzytkownik_id, $konto_id, '$expiration_time', 'aktywna')
-    ");
-
-    if ($insert_res) {
-        $conn->query("
-            DELETE ek 
-            FROM elementy_koszyka ek
-            JOIN koszyki k ON ek.koszyk_id = k.id
-            WHERE k.uzytkownik_id != $uzytkownik_id
-            AND ek.konto_gier_id = $konto_id
-        ");
-        
-        $koszyk_message = dodajDoKoszyka($conn, $uzytkownik_id, $konto_id);
-        return "Konto zarezerwowane pomyślnie na 15 minut! {$koszyk_message} Przejdź do finalizacji w koszyku.";
-    } else {
-        return "Wystąpił błąd podczas rezerwacji, spróbuj ponownie."; 
-    }
-}
-
-/**
- * FUNKCJA 3: anulujRezerwacje
- */
-function anulujRezerwacje($conn, $uzytkownik_id, $konto_id) {
-    $conn->query("
-        DELETE ek 
-        FROM elementy_koszyka ek
-        JOIN koszyki k ON ek.koszyk_id = k.id
-        WHERE k.uzytkownik_id = $uzytkownik_id
-        AND ek.konto_gier_id = $konto_id
-    ");
-    
-    $delete_res = $conn->query("
-        DELETE FROM rezerwacje 
-        WHERE uzytkownik_id = $uzytkownik_id 
-        AND konto_gier_id = $konto_id 
-        AND status = 'aktywna'
-        LIMIT 1
-    ");
-
-    if ($delete_res && $conn->affected_rows > 0) {
-        return "Rezerwacja została anulowana. Konto zostało usunięte z koszyka.";
-    } else {
-        return "Błąd: Brak aktywnej rezerwacji do anulowania.";
-    }
+    return "Błąd rezerwacji.";
 }
 
 /**
@@ -131,11 +95,7 @@ function anulujRezerwacje($conn, $uzytkownik_id, $konto_id) {
  */
 function pobierzKontaZGryPromocjami($conn) {
     $sql = "
-        SELECT 
-            k.id, k.tytul_gry, k.cena_podstawowa, 
-            p.wartosc_znizki, p.data_zakonczenia, p.aktywna,
-            r.status AS rezerwacja_status,
-            r.czas_wygasniecia AS rezerwacja_do
+        SELECT k.id, k.tytul_gry, k.cena_podstawowa, p.wartosc_znizki, p.data_zakonczenia, p.aktywna, r.status AS rezerwacja_status, r.czas_wygasniecia AS rezerwacja_do
         FROM konta_gier k
         LEFT JOIN promocje p ON k.promocja_id = p.id
         LEFT JOIN rezerwacje r ON k.id = r.konto_gier_id AND r.status = 'aktywna' AND r.czas_wygasniecia > NOW()
@@ -145,41 +105,26 @@ function pobierzKontaZGryPromocjami($conn) {
     
     $result = $conn->query($sql);
     $konta = [];
-
-    if ($result && $result->num_rows > 0) {
-        while($row = $result->fetch_assoc()) {
-            $cena_finalna = obliczCeneKoncowa($row['cena_podstawowa'], $row['wartosc_znizki'], $row['aktywna'], $row['data_zakonczenia']);
-            
-            $znizka_opis = "";
-            if ($cena_finalna < $row['cena_podstawowa']) {
-                $znizka_procent = $row['wartosc_znizki'] * 100;
-                $znizka_opis = " (Promocja: -$znizka_procent%!)";
-            }
-
-            $konta[] = [
-                'id' => $row['id'],
-                'tytul' => $row['tytul_gry'],
-                'cena_podstawowa' => number_format($row['cena_podstawowa'], 2),
-                'cena_promocyjna' => number_format($cena_finalna, 2),
-                'znizka_opis' => $znizka_opis,
-                'rezerwacja_status' => $row['rezerwacja_status'],
-                'rezerwacja_do' => $row['rezerwacja_do']
-            ];
-        }
+    while($row = $result->fetch_assoc()) {
+        $cena_f = obliczCeneKoncowa($row['cena_podstawowa'], $row['wartosc_znizki'], $row['aktywna'], $row['data_zakonczenia']);
+        $konta[] = [
+            'id' => $row['id'],
+            'tytul' => $row['tytul_gry'],
+            'cena_podstawowa' => number_format($row['cena_podstawowa'], 2),
+            'cena_promocyjna' => number_format($cena_f, 2),
+            'znizka_opis' => ($cena_f < $row['cena_podstawowa']) ? " (Promocja: -".($row['wartosc_znizki']*100)."%!)" : "",
+            'rezerwacja_status' => $row['rezerwacja_status'],
+            'rezerwacja_do' => $row['rezerwacja_do']
+        ];
     }
     return $konta;
 }
 
-/**
- * FUNKCJA 5: usunZKoszka
- */
 function usunZKoszka($conn, $uzytkownik_id, $konto_id) {
-    $koszyk_query = $conn->query("SELECT id FROM koszyki WHERE uzytkownik_id = $uzytkownik_id");
-    if ($koszyk_query->num_rows == 0) return "Błąd: Brak koszyka.";
-
-    $koszyk_id = $koszyk_query->fetch_assoc()['id'];
-    $delete_item = $conn->query("DELETE FROM elementy_koszyka WHERE koszyk_id = $koszyk_id AND konto_gier_id = $konto_id LIMIT 1");
-
-    return ($delete_item && $conn->affected_rows > 0) ? "Pomyślnie usunięto z koszyka." : "Błąd podczas usuwania.";
+    $koszyk_q = $conn->query("SELECT id FROM koszyki WHERE uzytkownik_id = $uzytkownik_id");
+    if ($koszyk_q->num_rows == 0) return "Błąd: Brak koszyka.";
+    $koszyk_id = $koszyk_q->fetch_assoc()['id'];
+    $conn->query("DELETE FROM elementy_koszyka WHERE koszyk_id = $koszyk_id AND konto_gier_id = $konto_id LIMIT 1");
+    return "Usunięto konto z koszyka.";
 }
 ?>
